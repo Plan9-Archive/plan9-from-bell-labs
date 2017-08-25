@@ -560,31 +560,6 @@ err:
 }
 
 static int
-dh_client11(Conn *c, Packet *)
-{
-	Packet *p;
-	int n;
-
-	if (c->e)
-		mpfree(c->e);
-	c->e = mpnew(1024);
-
-	/* Compute e: RFC4253 */
-	if (c->x)
-		mpfree(c->x);
-	c->x = mprand(128, genrandom, nil);
-	mpexp(two, c->x, p1, c->e);
-
-	p = new_packet(c);
-	add_byte(p, SSH_MSG_KEXDH_INIT);
-	add_mp(p, c->e);
-	n = finish_packet(p);
-	iowrite(c->dio, c->datafd, p->nlength, n);
-	free(p);
-	return 0;
-}
-
-static int
 findkeyinuserring(Conn *c, RSApub *srvkey)
 {
 	int n;
@@ -681,7 +656,45 @@ verifyhostkey(Conn *c, RSApub *srvkey, Packet *sig)
 }
 
 static int
-dh_client12(Conn *c, Packet *p)
+dh_client1(Conn *c, Packet *, mpint *grp, int nbit, int randbits)
+{
+	Packet *p;
+	int n;
+
+	if (c->e)
+		mpfree(c->e);
+	c->e = mpnew(nbit);
+
+	/* Compute e: RFC4253 */
+	if (c->x)
+		mpfree(c->x);
+	c->x = mprand(randbits, genrandom, nil);
+	mpexp(two, c->x, grp, c->e);
+
+	p = new_packet(c);
+	add_byte(p, SSH_MSG_KEXDH_INIT);
+	add_mp(p, c->e);
+	n = finish_packet(p);
+	iowrite(c->dio, c->datafd, p->nlength, n);
+	free(p);
+	return 0;
+}
+
+static int
+dh_client1g1(Conn *c, Packet *pckt)
+{
+	return dh_client1(c, pckt, p1, 1024, 128);
+}
+
+static int
+dh_client1g14(Conn *c, Packet *pckt)
+{
+	return dh_client1(c, pckt, p14, 2048, 256);
+}
+
+
+static int
+dh_client2(Conn *c, Packet *p, mpint *grp, int nbit)
 {
 	int n, retval;
 #ifdef VERIFYKEYS
@@ -704,8 +717,8 @@ dh_client12(Conn *c, Packet *p)
 	q += nhgetl(q) + 4;
 	get_string(p, q, (char *)sig->payload, Maxpktpay, &n);
 	sig->rlength = n;
-	k = mpnew(1024);
-	mpexp(f, c->x, p1, k);
+	k = mpnew(nbit);
+	mpexp(f, c->x, grp, k);
 
 	/* Compute H: RFC 4253 */
 	init_packet(pack2);
@@ -786,31 +799,15 @@ out:
 }
 
 static int
-dh_client141(Conn *c, Packet *)
+dh_client2g1(Conn *c, Packet *pckt)
 {
-	Packet *p;
-	mpint *e, *x;
-	int n;
-
-	/* Compute e: RFC4253 */
-	e = mpnew(2048);
-	x = mprand(256, genrandom, nil);
-	mpexp(two, x, p14, e);
-	p = new_packet(c);
-	add_byte(p, SSH_MSG_KEXDH_INIT);
-	add_mp(p, e);
-	n = finish_packet(p);
-	iowrite(c->dio, c->datafd, p->nlength, n);
-	free(p);
-	mpfree(e);
-	mpfree(x);
-	return 0;
+	return dh_client2(c, pckt, p1, 1024);
 }
 
 static int
-dh_client142(Conn *, Packet *)
+dh_client2g14(Conn *c, Packet *pckt)
 {
-	return 0;
+	return dh_client2(c, pckt, p14, 2048);
 }
 
 static void
@@ -922,15 +919,15 @@ genkeys(Conn *c, uchar h[], mpint *k)
 Kex dh1sha1 = {
 	"diffie-hellman-group1-sha1",
 	dh_server1,
-	dh_client11,
-	dh_client12
+	dh_client1g1,
+	dh_client2g1
 };
 
 Kex dh14sha1 = {
 	"diffie-hellman-group14-sha1",
 	dh_server14,
-	dh_client141,
-	dh_client142
+	dh_client1g14,
+	dh_client2g14
 };
 
 PKA rsa_pka = {

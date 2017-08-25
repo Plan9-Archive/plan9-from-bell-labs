@@ -35,6 +35,9 @@ Cipher *cryptos[] = {
 	&cipheraes128,
 	&cipheraes192,
 	&cipheraes256,
+	&cipheraesctr128,
+	&cipheraesctr192,
+	&cipheraesctr256,
 //	&cipherblowfish,
 	&cipher3des,
 	&cipherrc4,
@@ -103,7 +106,7 @@ static int deferredinit(Conn *c);
 static void
 sshlogint(Conn *c, char *file, char *p)
 {
-	char *role, *id;
+	char *role, *id, *state;
 
 	if (c == nil)
 		role = "";
@@ -117,9 +120,13 @@ sshlogint(Conn *c, char *file, char *p)
 		id = smprint("user %s@%s id %d ", c->user, c->remote, c->id);
 	else
 		id = smprint("id %d ", c->id);
-
-	syslog(0, file, "%s: %s%s%s", argv0, role, id, p);
+	if (c != nil && c->state)
+		state = smprint("[%s] ", st_names[c->state]);
+	else
+		state = strdup("");
+	syslog(0, file, "%s: %s%s%s%s", argv0, role, state, id, p);
 	free(id);
+	free(state);
 }
 
 void
@@ -2096,6 +2103,7 @@ negotiating(Conn *c, Packet *p, Packet *p2, char *buf, int size)
 		}
 		return -1;
 	case SSH_MSG_NEWKEYS:
+		sshdebug(c, "processing SSH_MSG_NEWKEYS");
 		/*
 		 * If we're just updating, go straight to
 		 * established, otherwise wait for auth'n.
@@ -2142,9 +2150,11 @@ negotiating(Conn *c, Packet *p, Packet *p2, char *buf, int size)
 		qunlock(&c->l);
 		break;
 	case SSH_MSG_KEXDH_INIT:
+		sshdebug(c, "processing SSH_MSG_KEXDH_INIT");
 		kexes[c->kexalg]->serverkex(c, p);
 		break;
 	case SSH_MSG_KEXDH_REPLY:
+		sshdebug(c, "processing SSH_MSG_KEXDH_REPLY");
 		init_packet(p2);
 		p2->c = c;
 		if (kexes[c->kexalg]->clientkex2(c, p) < 0) {
@@ -2176,6 +2186,7 @@ negotiating(Conn *c, Packet *p, Packet *p2, char *buf, int size)
 		qunlock(&c->l);
 		break;
 	case SSH_MSG_SERVICE_REQUEST:
+		sshdebug(c, "processing SSH_MSG_SERVICE_REQUEST");
 		get_string(p, p->payload + 1, buf, Arbbufsz, nil);
 		sshdebug(c, "got service request: %s", buf);
 		if (strcmp(buf, "ssh-userauth") == 0 ||
@@ -2201,6 +2212,7 @@ negotiating(Conn *c, Packet *p, Packet *p2, char *buf, int size)
 		}
 		break;
 	case SSH_MSG_SERVICE_ACCEPT:
+		sshdebug(c, "processing SSH_MSG_SERVICE_ACCEPT");
 		get_string(p, p->payload + 1, buf, Arbbufsz, nil);
 		if (c->service && strcmp(c->service, "ssh-userauth") == 0) {
 			free(c->service);
