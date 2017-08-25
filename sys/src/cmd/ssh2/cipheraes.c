@@ -24,6 +24,7 @@ initaes(Conn *c, int dir, int bits)
 		setupAESstate(&cs->state, c->s2cek, bits/8, c->s2civ);
 	else
 		setupAESstate(&cs->state, c->c2sek, bits/8, c->c2siv);
+	cs->state.ctrsz = bits/8;
 	qunlock(&aeslock);
 	return cs;
 }
@@ -66,6 +67,27 @@ decryptaes(CipherState *cs, uchar *buf, int nbuf)
 	qunlock(&aeslock);
 }
 
+static void
+encryptaesctr(CipherState *cs, uchar *buf, int nbuf)
+{
+	if(cs->state.setup != 0xcafebabe || cs->state.rounds > AESmaxrounds)
+		return;
+	qlock(&aeslock);
+	aesCTRencrypt(buf, nbuf, &cs->state);
+	qunlock(&aeslock);
+}
+
+static void
+decryptaesctr(CipherState *cs, uchar *buf, int nbuf)
+{
+	if(cs->state.setup != 0xcafebabe || cs->state.rounds > AESmaxrounds)
+		return;
+	qlock(&aeslock);
+	aesCTRdecrypt(buf, nbuf, &cs->state);
+	qunlock(&aeslock);
+}
+
+
 Cipher cipheraes128 = {
 	"aes128-cbc",
 	AESbsize,
@@ -88,4 +110,29 @@ Cipher cipheraes256 = {
 	initaes256,
 	encryptaes,
 	decryptaes,
+};
+
+/* RFC 4344 */
+Cipher cipheraesctr128 = {
+	"aes128-ctr",
+	AESbsize,
+	initaes128,
+	encryptaesctr,
+	decryptaesctr,
+};
+
+Cipher cipheraesctr192 = {
+	"aes192-ctr",
+	AESbsize,
+	initaes192,
+	encryptaesctr,
+	decryptaesctr,
+};
+
+Cipher cipheraesctr256 = {
+	"aes256-ctr",
+	AESbsize,
+	initaes256,
+	encryptaesctr,
+	decryptaesctr,
 };
