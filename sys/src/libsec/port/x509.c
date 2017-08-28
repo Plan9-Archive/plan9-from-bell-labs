@@ -2616,7 +2616,7 @@ X509req(RSApriv *priv, char *subj, int *certlen)
 	mpfree(pkcs1);
 	e = mkseq(
 		mkel(certinfo,
-		mkel(mkalg(ALG_md5),
+		mkel(mkalg(ALG_md5WithRSAEncryption),
 		mkel(mkbits(buf, buflen),
 		nil))));
 	free(buf);
