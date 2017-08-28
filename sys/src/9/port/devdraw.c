@@ -2093,6 +2093,8 @@ drawmesg(Client *client, void *av, int n)
 			drawrectangle(&r, a+5);
 			if(!rectinrect(r, dst->r))
 				error(Ewriteoutside);
+			if(dst->layer && dst->layer->screen->image->data == screenimage->data)
+				dst->layer->clear = 0;	/* forcing hwdraw gets the soft cursor right */
 			y = memload(dst, r, a+m, n-m, *a=='Y');
 			if(y < 0)
 				error("bad writeimage call");
